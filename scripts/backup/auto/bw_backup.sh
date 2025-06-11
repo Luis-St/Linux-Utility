@@ -96,14 +96,9 @@ create_backup_directory() {
 configure_bitwarden() {
     log_info "Configuring Bitwarden CLI..."
 
-    # Set server URL
-    bw config server "$BW_SERVER" >> "$LOG_FILE" 2>&1
-
     # Set client credentials
     export BW_CLIENTID="$CLIENT_ID"
     export BW_CLIENTSECRET="$CLIENT_SECRET"
-
-    log_info "Bitwarden CLI configured for server: $BW_SERVER"
 }
 
 # Function to login to Bitwarden
@@ -113,7 +108,7 @@ login_bitwarden() {
     # Login using client credentials
     BW_SESSION=$(bw login --apikey --raw 2>>"$LOG_FILE")
 
-    if [[ $? -eq 0 && -n "$BW_SESSION" ]]; then
+    if [[ $? -eq 0 ]]; then
         export BW_SESSION
         log_info "Successfully logged into Bitwarden"
     else

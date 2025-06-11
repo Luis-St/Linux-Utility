@@ -71,7 +71,12 @@ check_dependencies() {
         exit 1
     fi
 
+    # Detect bw installation path for systemd service
+    BW_PATH=$(which bw)
+    BW_DIR=$(dirname "$BW_PATH")
+
     print_success "All dependencies satisfied"
+    print_info "Bitwarden CLI found at: $BW_PATH"
 }
 
 # Function to get credentials from user
@@ -172,6 +177,7 @@ Type=oneshot
 ExecStart=$TARGET_SCRIPT_PATH
 EnvironmentFile=$ENV_FILE
 WorkingDirectory=$HOME
+Environment="PATH=$BW_DIR:/usr/local/bin:/usr/bin:/bin"
 StandardOutput=append:$HOME/.bitwarden_backup.log
 StandardError=append:$HOME/.bitwarden_backup.log
 
@@ -183,6 +189,7 @@ EOF
     chmod 600 "$SERVICE_PATH"
 
     print_success "Service file created at $SERVICE_PATH"
+    print_info "Configured PATH: $BW_DIR:/usr/local/bin:/usr/bin:/bin"
 }
 
 # Function to enable and start the service
@@ -240,6 +247,7 @@ show_completion_info() {
     echo "  Script Location: $TARGET_SCRIPT_PATH"
     echo "  Log File: $HOME/.bitwarden_backup.log"
     echo "  Environment File: $ENV_FILE"
+    echo "  Bitwarden CLI Path: $BW_PATH"
     echo
     echo -e "${BLUE}Useful Commands:${NC}"
     echo "  Check status:     systemctl --user status $SERVICE_NAME"
@@ -294,7 +302,7 @@ main() {
     if [[ -f "$TARGET_SCRIPT_PATH" ]] || [[ -f "$SERVICE_PATH" ]]; then
         print_warning "Existing installation detected"
         echo -n "Do you want to continue and overwrite? (y/N): "
-        read -n 1 -r
+        read -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             print_info "Installation cancelled"
