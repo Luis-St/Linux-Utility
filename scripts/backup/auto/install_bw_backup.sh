@@ -1,0 +1,323 @@
+#!/bin/bash
+
+# Bitwarden Backup Service Install Script
+# Installs and configures the Bitwarden backup service
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Configuration
+SCRIPT_NAME="bw_backup.sh"
+SERVICE_NAME="bitwarden-backup.service"
+BACKUP_DIR="$HOME/.backup"
+TARGET_SCRIPT_PATH="$BACKUP_DIR/bw_backup.sh"
+SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+SERVICE_PATH="$SYSTEMD_USER_DIR/$SERVICE_NAME"
+ENV_FILE="$BACKUP_DIR/.bitwarden_env"
+
+# Function to print colored output
+print_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+print_header() {
+    echo -e "${BLUE}================================${NC}"
+    echo -e "${BLUE}  Bitwarden Backup Installer${NC}"
+    echo -e "${BLUE}================================${NC}"
+    echo
+}
+
+# Function to check if script is run from correct directory
+check_files() {
+    print_info "Checking for required files..."
+
+    if [[ ! -f "$SCRIPT_NAME" ]]; then
+        print_error "$SCRIPT_NAME not found in current directory"
+        echo "Please run this installer from the directory containing $SCRIPT_NAME"
+        exit 1
+    fi
+
+    print_success "Found $SCRIPT_NAME"
+}
+
+# Function to check dependencies
+check_dependencies() {
+    print_info "Checking dependencies..."
+
+    if ! command -v bw &> /dev/null; then
+        print_error "Bitwarden CLI (bw) is not installed"
+        echo "Please install it with: npm install -g @bitwarden/cli"
+        exit 1
+    fi
+
+    if ! command -v systemctl &> /dev/null; then
+        print_error "systemctl is not available. This installer requires systemd."
+        exit 1
+    fi
+
+    print_success "All dependencies satisfied"
+}
+
+# Function to get credentials from user
+get_credentials() {
+    print_info "Please provide your Bitwarden credentials:"
+    echo
+
+    echo -n "Enter your Bitwarden Client ID: "
+    read CLIENT_ID
+
+    if [[ -z "$CLIENT_ID" ]]; then
+        print_error "Client ID cannot be empty"
+        exit 1
+    fi
+
+    echo -n "Enter your Bitwarden Client Secret: "
+    read -s CLIENT_SECRET
+    echo
+
+    if [[ -z "$CLIENT_SECRET" ]]; then
+        print_error "Client Secret cannot be empty"
+        exit 1
+    fi
+
+    echo -n "Enter your Bitwarden Master Password: "
+    read -s MASTER_PASSWORD
+    echo
+
+    if [[ -z "$MASTER_PASSWORD" ]]; then
+        print_error "Master Password cannot be empty"
+        exit 1
+    fi
+
+    print_success "Credentials collected"
+}
+
+# Function to create environment file
+create_env_file() {
+    print_info "Creating secure environment file..."
+
+    # Ensure backup directory exists
+    mkdir -p "$BACKUP_DIR"
+
+    cat > "$ENV_FILE" << EOF
+BW_CLIENT_ID=$CLIENT_ID
+BW_CLIENT_SECRET=$CLIENT_SECRET
+BW_MASTER_PASSWORD=$MASTER_PASSWORD
+EOF
+
+    # Secure the environment file
+    chmod 600 "$ENV_FILE"
+
+    print_success "Environment file created at $ENV_FILE"
+}
+
+# Function to copy backup script
+install_script() {
+    print_info "Installing backup script..."
+
+    # Create backup directory if it doesn't exist
+    mkdir -p "$BACKUP_DIR"
+
+    if [[ $? -ne 0 ]]; then
+        print_error "Failed to create directory $BACKUP_DIR"
+        exit 1
+    fi
+
+    # Copy the script to target location
+    cp "$SCRIPT_NAME" "$TARGET_SCRIPT_PATH"
+
+    if [[ $? -ne 0 ]]; then
+        print_error "Failed to copy script to $TARGET_SCRIPT_PATH"
+        exit 1
+    fi
+
+    # Make it executable
+    chmod +x "$TARGET_SCRIPT_PATH"
+
+    print_success "Backup script installed to $TARGET_SCRIPT_PATH"
+}
+
+# Function to create systemd service
+create_service() {
+    print_info "Creating systemd user service..."
+
+    # Create systemd user directory if it doesn't exist
+    mkdir -p "$SYSTEMD_USER_DIR"
+
+    # Create the service file
+    cat > "$SERVICE_PATH" << EOF
+[Unit]
+Description=Bitwarden Backup Service
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=$TARGET_SCRIPT_PATH
+EnvironmentFile=$ENV_FILE
+WorkingDirectory=$HOME
+StandardOutput=append:$HOME/.bitwarden_backup.log
+StandardError=append:$HOME/.bitwarden_backup.log
+
+[Install]
+WantedBy=default.target
+EOF
+
+    # Secure the service file
+    chmod 600 "$SERVICE_PATH"
+
+    print_success "Service file created at $SERVICE_PATH"
+}
+
+# Function to enable and start the service
+setup_service() {
+    print_info "Setting up systemd service..."
+
+    # Reload systemd user daemon
+    systemctl --user daemon-reload
+
+    if [[ $? -ne 0 ]]; then
+        print_error "Failed to reload systemd user daemon"
+        exit 1
+    fi
+
+    # Enable the service
+    systemctl --user enable "$SERVICE_NAME"
+
+    if [[ $? -ne 0 ]]; then
+        print_error "Failed to enable service"
+        exit 1
+    fi
+
+    print_success "Service enabled and configured"
+}
+
+# Function to test the service
+test_service() {
+    print_info "Testing the service..."
+
+    # Start the service
+    systemctl --user start "$SERVICE_NAME"
+
+    if [[ $? -eq 0 ]]; then
+        print_success "Service test completed successfully"
+
+        # Check if log file was created
+        if [[ -f "$HOME/.bitwarden_backup.log" ]]; then
+            print_info "Log file created. Recent entries:"
+            tail -5 "$HOME/.bitwarden_backup.log" | sed 's/^/  /'
+        fi
+    else
+        print_warning "Service test failed. Check the status with:"
+        echo "  systemctl --user status $SERVICE_NAME"
+        echo "  tail $HOME/.bitwarden_backup.log"
+    fi
+}
+
+# Function to show post-install information
+show_completion_info() {
+    echo
+    print_success "Installation completed successfully!"
+    echo
+    echo -e "${BLUE}Service Information:${NC}"
+    echo "  Service Name: $SERVICE_NAME"
+    echo "  Script Location: $TARGET_SCRIPT_PATH"
+    echo "  Log File: $HOME/.bitwarden_backup.log"
+    echo "  Environment File: $ENV_FILE"
+    echo
+    echo -e "${BLUE}Useful Commands:${NC}"
+    echo "  Check status:     systemctl --user status $SERVICE_NAME"
+    echo "  Start backup:     systemctl --user start $SERVICE_NAME"
+    echo "  View logs:        tail -f $HOME/.bitwarden_backup.log"
+    echo "  Disable service:  systemctl --user disable $SERVICE_NAME"
+    echo
+    echo -e "${BLUE}Optional: Enable Lingering${NC}"
+    echo "  To run backups even when not logged in:"
+    echo "  sudo loginctl enable-linger $USER"
+    echo
+    echo -e "${BLUE}Optional: Set up Timer for Regular Backups${NC}"
+    echo "  Create a timer to run backups daily:"
+    echo "  cat > $SYSTEMD_USER_DIR/bitwarden-backup.timer << 'EOF'"
+    echo "  [Unit]"
+    echo "  Description=Run Bitwarden Backup Daily"
+    echo "  Requires=bitwarden-backup.service"
+    echo "  "
+    echo "  [Timer]"
+    echo "  OnCalendar=daily"
+    echo "  Persistent=true"
+    echo "  "
+    echo "  [Install]"
+    echo "  WantedBy=timers.target"
+    echo "  EOF"
+    echo "  systemctl --user enable bitwarden-backup.timer"
+    echo "  systemctl --user start bitwarden-backup.timer"
+    echo
+}
+
+# Function to cleanup on error
+cleanup_on_error() {
+    print_warning "Cleaning up due to error..."
+
+    # Remove files if they were created
+    [[ -f "$TARGET_SCRIPT_PATH" ]] && rm -f "$TARGET_SCRIPT_PATH"
+    [[ -f "$SERVICE_PATH" ]] && rm -f "$SERVICE_PATH"
+    [[ -f "$ENV_FILE" ]] && rm -f "$ENV_FILE"
+
+    # Reload systemd to remove any partial service
+    systemctl --user daemon-reload 2>/dev/null
+}
+
+# Main installation function
+main() {
+    print_header
+
+    # Set up error handling
+    trap cleanup_on_error ERR
+
+    # Check for existing installation
+    if [[ -f "$TARGET_SCRIPT_PATH" ]] || [[ -f "$SERVICE_PATH" ]]; then
+        print_warning "Existing installation detected"
+        echo -n "Do you want to continue and overwrite? (y/N): "
+        read -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_info "Installation cancelled"
+            exit 0
+        fi
+        echo
+    fi
+
+    # Installation steps
+    check_files
+    check_dependencies
+    get_credentials
+    create_env_file
+    install_script
+    create_service
+    setup_service
+    test_service
+
+    # Clear sensitive variables
+    unset CLIENT_ID CLIENT_SECRET MASTER_PASSWORD
+
+    show_completion_info
+}
+
+# Run main function
+main "$@"
