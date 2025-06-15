@@ -18,6 +18,7 @@ usage() {
     echo "  -d, --directory DIR    Process specified directory instead of current directory"
     echo "  -e, --extensions EXTS  Only process files with specified extensions (comma-separated)"
     echo "  -x, --exclude PATTERNS Exclude files matching patterns (comma-separated)"
+    echo "  -X, --exclude-dirs DIRS Exclude directories (comma-separated)"
     echo "  -n, --dry-run         Show what would be converted without making changes"
     echo "  -v, --verbose         Show detailed output"
     echo "  -h, --help            Show this help message"
@@ -27,6 +28,7 @@ usage() {
     echo "  $0 -d /path/to/directory             # Convert files in specific directory"
     echo "  $0 -e txt,sh,py                     # Only convert .txt, .sh, and .py files"
     echo "  $0 -x '*.log,temp*'                 # Exclude .log files and files starting with 'temp'"
+    echo "  $0 -X 'node_modules,.git,build'     # Exclude specific directories"
     echo "  $0 -n                               # Dry run - show what would be converted"
 }
 
@@ -34,6 +36,7 @@ usage() {
 DIRECTORY="."
 EXTENSIONS=""
 EXCLUDE_PATTERNS=""
+EXCLUDE_DIRS=""
 DRY_RUN=false
 VERBOSE=false
 
@@ -50,6 +53,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -x|--exclude)
             EXCLUDE_PATTERNS="$2"
+            shift 2
+            ;;
+        -X|--exclude-dirs)
+            EXCLUDE_DIRS="$2"
             shift 2
             ;;
         -n|--dry-run)
@@ -111,6 +118,14 @@ if [[ -n "$EXCLUDE_PATTERNS" ]]; then
     done
 fi
 
+# Add exclude directories if specified
+if [[ -n "$EXCLUDE_DIRS" ]]; then
+    IFS=',' read -ra EXCLUDE_DIRS_ARRAY <<< "$EXCLUDE_DIRS"
+    for dir in "${EXCLUDE_DIRS_ARRAY[@]}"; do
+        FIND_CMD="$FIND_CMD ! -path \"*/$dir/*\" ! -name \"$dir\""
+    done
+fi
+
 # Function to check if file has Windows line endings
 has_windows_endings() {
     local file="$1"
@@ -148,6 +163,9 @@ if [[ -n "$EXTENSIONS" ]]; then
 fi
 if [[ -n "$EXCLUDE_PATTERNS" ]]; then
     echo "Excluding: $EXCLUDE_PATTERNS"
+fi
+if [[ -n "$EXCLUDE_DIRS" ]]; then
+    echo "Excluding directories: $EXCLUDE_DIRS"
 fi
 if [[ "$DRY_RUN" == true ]]; then
     echo -e "${YELLOW}DRY RUN MODE - No files will be modified${NC}"
