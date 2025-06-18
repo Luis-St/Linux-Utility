@@ -74,6 +74,35 @@ get_password() {
     log_info "Master password loaded from environment"
 }
 
+# Function to wait for OneDrive mount to be ready
+wait_for_mount() {
+    local max_attempts=30
+    local attempt=1
+    local mount_path="/home/luis/OneDrive"
+    local backup_path="$BASE_BACKUP_DIR"
+
+    log_info "Checking if OneDrive is mounted and accessible..."
+
+    while [[ $attempt -le $max_attempts ]]; do
+        # Check if OneDrive directory exists and is accessible
+        if [[ -d "$mount_path" ]] && [[ -w "$mount_path" ]]; then
+            # Try to create the backup directory to test write access
+            if mkdir -p "$backup_path" 2>/dev/null; then
+                log_info "OneDrive mount confirmed accessible (attempt $attempt)"
+                return 0
+            fi
+        fi
+
+        log_info "OneDrive not ready yet (attempt $attempt/$max_attempts), waiting..."
+        sleep 4
+        ((attempt++))
+    done
+
+    log_error "OneDrive mount not accessible after $max_attempts attempts"
+    log_error "Please check if OneDrive is properly mounted at: $mount_path"
+    exit 1
+}
+
 # Function to create backup directory structure
 create_backup_directory() {
     local date_folder=$(date +"%Y-%m-%d")
@@ -85,6 +114,7 @@ create_backup_directory() {
             log_info "Created backup directory: $BACKUP_DIR"
         else
             log_error "Failed to create backup directory: $BACKUP_DIR"
+            log_error "Check if OneDrive is properly mounted and accessible"
             exit 1
         fi
     else
@@ -197,6 +227,9 @@ main() {
     # Get credentials from environment
     get_credentials
     get_password
+
+    # Wait for OneDrive to be ready
+    wait_for_mount
 
     # Create backup directory
     create_backup_directory

@@ -169,12 +169,12 @@ create_service() {
     cat > "$SERVICE_PATH" << EOF
 [Unit]
 Description=Bitwarden Backup Service
-After=graphical-session.target
-Wants=graphical-session.target
+After=graphical-session.target onedriver.service
+Wants=graphical-session.target onedriver.service
 
 [Service]
 Type=oneshot
-ExecStart=$TARGET_SCRIPT_PATH
+ExecStart=/bin/bash -c "/bin/sleep 15 && $TARGET_SCRIPT_PATH"
 EnvironmentFile=$ENV_FILE
 WorkingDirectory=$HOME
 Environment="PATH=$BW_DIR:/usr/local/bin:/usr/bin:/bin"
