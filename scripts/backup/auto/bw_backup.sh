@@ -68,12 +68,6 @@ get_credentials() {
     log_info "Credentials loaded from environment variables"
 }
 
-# Function to get account password securely
-get_password() {
-    # Password is now read from environment variable in get_credentials()
-    log_info "Master password loaded from environment"
-}
-
 # Function to wait for OneDrive mount to be ready
 wait_for_mount() {
     local max_attempts=30
@@ -183,6 +177,12 @@ create_backup() {
     fi
 }
 
+# Function to silently attempt logout from Bitwarden at startup
+silent_logout() {
+    # Attempt to logout without any logging or output
+    bw logout &>/dev/null || true
+}
+
 # Function to logout from Bitwarden
 logout_bitwarden() {
     log_info "Logging out from Bitwarden..."
@@ -191,6 +191,8 @@ logout_bitwarden() {
 
 # Function to cleanup sensitive variables
 cleanup() {
+    silent_logout
+
     unset BW_SESSION
     unset CLIENT_ID
     unset CLIENT_SECRET
@@ -224,9 +226,11 @@ main() {
     # Check dependencies
     check_dependencies
 
+    # Silent logout to ensure no previous session interferes
+    silent_logout
+
     # Get credentials from environment
     get_credentials
-    get_password
 
     # Wait for OneDrive to be ready
     wait_for_mount
